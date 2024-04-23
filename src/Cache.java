@@ -73,6 +73,7 @@ public class Cache implements Buffer {
         Block evictee = findEvictee(set);
         signalEviction(evictee, index);
         undirty(evictee, address);
+        evictee.tag = tag;
     }
 
     public void write(long address) {
@@ -103,6 +104,7 @@ public class Cache implements Buffer {
         Block evictee = findEvictee(set);
         signalEviction(evictee, index);
         undirty(evictee, address);
+        evictee.tag = tag;
         // write the retrieved line to the evicted one's spot
         evictee.dirty = true;
     }
