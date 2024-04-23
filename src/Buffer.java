@@ -1,4 +1,5 @@
 public interface Buffer {
-    void read(long address);
-    void write(long address);
+    double read(long address, int indicator);
+    double write(long address, int indicator);
+    void addAccessEnergy(int increment);
 }
