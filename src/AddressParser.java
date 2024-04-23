@@ -10,9 +10,13 @@ public class AddressParser {
      * @param S number of sets
      */
     public AddressParser(int B, int S) {
+
         offsetBits = log2(B);
         indexBits = log2(S);
         tagBits = ADDRESS_LENGTH - (offsetBits + indexBits);
+//        System.out.println("number of offset bits: " + offsetBits);
+//        System.out.println("number of index bits: " + indexBits);
+//        System.out.println("number of tag bits: " + tagBits);
     }
 
     public int getTag(long address) {
@@ -27,8 +31,14 @@ public class AddressParser {
         return (int) bitExtracted(address, offsetBits, 0);
     }
 
+    public long reconstructAddress(int tag, int index) {
+        long newTag = (long) tag << (offsetBits + indexBits);
+        long newInd = (long) index << (offsetBits);
+        return newTag + newInd;
+    }
+
     private static int log2(int N) {
-        return (int)(Math.log(N) / Math.log(2));
+        return (int)Math.ceil(Math.log(N) / Math.log(2));
     }
 
     private static long bitExtracted(long number, long k, long p) {

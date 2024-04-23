@@ -8,5 +8,7 @@ public class Main {
             Trace t = scanner.nextTrace();
             sim.acceptTrace(t);
         }
+
+        sim.printHitRatios();
     }
 }

@@ -1,4 +1,4 @@
-public class DRAM {
+public class DRAM implements Buffer {
     private final double ACTIVE_POWER = 4;  // J/s
     private final double IDLE_POWER = 0.8;
     private long accesses;
@@ -7,11 +7,11 @@ public class DRAM {
 
     }
 
-    public void read() {
+    public void read(long address) {
         accesses++;
     }
 
-    public void write() {
+    public void write(long address) {
         accesses++;
     }
 

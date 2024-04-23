@@ -1,6 +1,6 @@
-import java.util.Map;
+import java.util.ArrayList;
 
-public class Cache {
+public class Cache implements Buffer {
     private final double ACTIVE_POWER, IDLE_POWER, ACCESS_ENERGY, ACCESS_TIME;
     private int hits, misses;
     private int reads, writes;
@@ -8,7 +8,8 @@ public class Cache {
 
     private Block[][] data;  // data[1] gives set 1; data[1][2] gives block 2 of set 1
     private AddressParser parser;
-    private Cache nextLevel;
+    private Buffer nextLevel;
+    private ArrayList<Cache> prevLevel;
 
     /**
      * Creates an empty cache. See SE lab notes pt. 2 for more info about params.
@@ -33,80 +34,113 @@ public class Cache {
         }
 
         parser = new AddressParser(B, S);
+        prevLevel = new ArrayList<>();
     }
 
-    public void setNextLevel(Cache nextLevel) {
+    public void setNextLevel(Buffer nextLevel) {
         this.nextLevel = nextLevel;
     }
 
-    public long read(long address) {
+    public void addPrevLevelCache(Cache prevCache) {
+        prevLevel.add(prevCache);
+    }
+
+    public void read(long address) {
         int index = parser.getIndex(address);
         Block[] set = data[index];
         int tag = parser.getTag(address);
         Block hit = checkHit(set, tag);
         if(hit != null) {
             // done; return the data
-            return hit.data;
+            hits++;
+            return;
         }
+        misses++;
 
         // cache miss, first need to read in data from next level
-        long newData = nextLevel.read(address);
+        nextLevel.read(address);
         // now need to find a place to put this line
 
         // first look for an unoccupied line
         Block unoccupied = checkUnoccupied(set);
         if(unoccupied != null) {
-            unoccupied.data = newData;
             unoccupied.tag = tag;
             unoccupied.valid = true;
-            return newData;
+            return;
         }
 
         // no unoccupied lines, evict a line from this set
         Block evictee = findEvictee(set);
-        // TODO: 4/22/2024 send signal to previous levels that the chosen block is being evicted
-        // evict block i
-        cleanBlock(evictee, address);
-        // perform the eviction and return
-        evictee.data = newData;
-        return newData;
+        signalEviction(evictee, index);
+        undirty(evictee, address);
     }
 
-    public void write(long address, long value) {
-        int index = parser.getIndex(address); // TODO: 4/22/2024 index doesn't exist for direct map
+    public void write(long address) {
+        int index = parser.getIndex(address);
         Block[] set = data[index];
         int tag = parser.getTag(address);
         Block hit = checkHit(set, tag);
         if(hit != null) {
-            hit.data = value;
+            hits++;
             hit.dirty = true;
             return;
         }
+        misses++;
         // cache miss, read in missing line from next level
-        long newData = nextLevel.read(address);
+        nextLevel.read(address);
         // look for an unoccupied block in the set
         Block unoccupied = checkUnoccupied(set);
         if(unoccupied != null) {
             // block is unoccupied, put the retrieved line here
-            unoccupied.data = newData;
             unoccupied.tag = tag;
             unoccupied.valid = true;
             // write the value to the correct offset
-            unoccupied.data = value;
             unoccupied.dirty = true;
             return;
         }
 
         // no unoccupied blocks, must evict an occupied one
         Block evictee = findEvictee(set);
-        // TODO: 4/22/2024 send signal to previous levels that the chosen block is being evicted
-        // evict block i
-        cleanBlock(evictee, address);
+        signalEviction(evictee, index);
+        undirty(evictee, address);
         // write the retrieved line to the evicted one's spot
-        evictee.data = newData;
-        // write the value to write to this line and set the dirty bit
-        evictee.data = value;
         evictee.dirty = true;
+    }
+
+    public double hitRatio() {
+        return (double) hits / (double) (hits + misses);
+    }
+
+    public int getHits() {
+        return hits;
+    }
+
+    public int getMisses() {
+        return misses;
+    }
+
+    public int getAccesses() {
+        return hits + misses;
+    }
+
+    private void evict(long address) {
+        int index = parser.getIndex(address);
+        int tag = parser.getTag(address);
+        Block[] set = data[index];
+        Block evictee = checkHit(set, tag);
+        if(evictee != null) {
+            undirty(evictee, address);
+            evictee.tag = 0;
+            evictee.valid = false;
+        }
+    }
+
+    private void signalEviction(Block evictee, int index) {
+        if(prevLevel.size() > 0) {
+            for(Cache c : prevLevel) {
+                c.evict(parser.reconstructAddress(evictee.tag, index));
+            }
+        }
     }
 
     /**
@@ -119,10 +153,10 @@ public class Cache {
         for (Block block : set) {
             if (block.valid && block.tag == tag) {
                 // cache hit
-                // maybe use offset to find the data
                 return block;
             }
         }
+        // cache miss
         return null;
     }
 
@@ -135,7 +169,6 @@ public class Cache {
         // look for an unoccupied line
         for (Block block : set) {
             if (!block.valid) {
-                // line i is unoccupied, bring in a new line from the next level
                 return block;
             }
         }
@@ -155,10 +188,10 @@ public class Cache {
         return set[i];
     }
 
-    private void cleanBlock(Block b, long address) {
+    private void undirty(Block b, long address) {
         if(b.dirty) {
             // need to write evictee the next level
-            nextLevel.write(address, b.data);
+            nextLevel.write(address);
             b.dirty = false;
         }
     }

@@ -5,9 +5,14 @@ public class Simulator {
 
     public Simulator() {
         dram = new DRAM();
-        l1I = new Cache(1, 64, 32_000, 1, 0.5, 0.5e-9, 0);
-        l1D = new Cache(1, 64, 32_000, 1, 0.5, 0.5e-9, 0);
-        l2 = new Cache(4, 64, 256_000, 2, 0.8,5e-9, 5e-12);
+        l1I = new Cache(1, 64, 32_768, 1, 0.5, 0.5e-9, 0);
+        l1D = new Cache(1, 64, 32_768, 1, 0.5, 0.5e-9, 0);
+        l2  = new Cache(8, 64, 262_144, 2, 0.8,5e-9, 5e-12);
+        l1I.setNextLevel(l2);
+        l1D.setNextLevel(l2);
+        l2.setNextLevel(dram);
+        l2.addPrevLevelCache(l1D);
+        l2.addPrevLevelCache(l1I);
     }
 
     /**
@@ -15,11 +20,20 @@ public class Simulator {
      */
     public void acceptTrace(Trace t) {
         cycles++; // 1 cycle to read in trace
+        switch(t.OP) {
+            case INSN_FETCH -> l1I.read(t.ADDRESS);
+            case MEM_READ -> l1D.read(t.ADDRESS);
+            case MEM_WRITE -> l1D.write(t.ADDRESS);
+        }
+    }
 
-//        l1I.read();
-//        l2.read();
-//        dram.read();
-//        cycles += 100;
+    public void printHitRatios() {
+        System.out.println("L1I hit/miss ratio: " + l1I.hitRatio());
+        System.out.println("L1D hit/miss ratio: " + l1D.hitRatio());
+        System.out.println("L2 hit/miss ratio: " + l2.hitRatio());
+        System.out.println("L1I accesses: " + l1I.getAccesses());
+        System.out.println("L1D accesses: " + l1D.getAccesses());
+        System.out.println("L2 accesses: " + l2.getAccesses());
     }
 
     /**
