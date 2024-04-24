@@ -78,7 +78,7 @@ public class Cache implements Buffer {
         }
 
         // cache miss, first need to read in data from next level
-        double res = nextLevel.read(address, indicator);
+        double res = nextLevel.read(address, updateIndicator(indicator));
         // now need to find a place to put this line
 
         // first look for an unoccupied line
@@ -133,7 +133,7 @@ public class Cache implements Buffer {
         }
 
         // cache miss, read in missing line from next level
-        nextLevel.read(address, indicator);
+        nextLevel.read(address, updateIndicator(indicator));
         // look for an unoccupied block in the set
         Block unoccupied = checkUnoccupied(set);
         if(unoccupied != null) {
@@ -180,6 +180,15 @@ public class Cache implements Buffer {
 
     public int getAccesses() {
         return hits + misses;
+    }
+
+    public int updateIndicator(int indicator) {
+        if (indicator == 0 || indicator == 1) {
+            indicator = 2;
+        } else if (indicator == 2){
+            indicator++;
+        }
+        return indicator;
     }
 
     private void evict(long address, int indicator) {
@@ -250,7 +259,7 @@ public class Cache implements Buffer {
     private void undirty(Block b, long address, int indicator) {
         if(b.dirty) {
             // need to write evictee the next level
-            nextLevel.write(address, indicator);
+            nextLevel.write(address, updateIndicator(indicator));
             b.dirty = false;
             dirtyEvict++;
             if (indicator == 0 || indicator == 1) {
