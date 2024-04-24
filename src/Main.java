@@ -10,5 +10,6 @@ public class Main {
         }
 
         sim.printHitRatios();
+        sim.printEnergyConsumption();
     }
 }

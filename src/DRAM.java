@@ -1,4 +1,6 @@
 public class DRAM implements Buffer {
+    public int accessEnergy;
+
     private final double ACTIVE_POWER = 4;  // J/s
     private final double IDLE_POWER = 0.8;
     private long accesses;
@@ -7,12 +9,21 @@ public class DRAM implements Buffer {
 
     }
 
-    public void read(long address) {
+    public double read(long address, int indicator) {
         accesses++;
+        this.accessEnergy += 200640;
+        return 50;
     }
 
-    public void write(long address) {
+    public double write(long address, int indicator) {
         accesses++;
+        this.accessEnergy += 200000;
+        return 5;  // will never have to use
+    }
+
+    @Override
+    public void addAccessEnergy(int increment) {
+
     }
 
     public long getAccesses() {

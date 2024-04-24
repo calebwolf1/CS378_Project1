@@ -1,8 +1,10 @@
 import java.util.ArrayList;
 
 public class Cache implements Buffer {
+    public int accessEnergy;
+    public int hits, misses, evict, dirtyEvict;
+
     private final double ACTIVE_POWER, IDLE_POWER, ACCESS_ENERGY, ACCESS_TIME;
-    private int hits, misses;
     private int reads, writes;
     private int idleTime, activeTime;
 
@@ -45,7 +47,12 @@ public class Cache implements Buffer {
         prevLevel.add(prevCache);
     }
 
-    public void read(long address) {
+    @Override
+    public void addAccessEnergy(int increment) {
+        accessEnergy++;
+    }
+
+    public double read(long address, int indicator) {
         int index = parser.getIndex(address);
         Block[] set = data[index];
         int tag = parser.getTag(address);
@@ -53,12 +60,25 @@ public class Cache implements Buffer {
         if(hit != null) {
             // done; return the data
             hits++;
-            return;
+            if (indicator == 0 || indicator == 1) {
+                this.accessEnergy += 500;
+                return 0.5;
+            } else if (indicator == 2) {
+                this.accessEnergy += 10000;
+                return 5;
+            }
+            assert false;
+            return -1;
         }
         misses++;
+        if (indicator == 0 || indicator == 1) {
+            this.accessEnergy += 505;
+        } else if (indicator == 2) {
+            this.accessEnergy += 10640;
+        }
 
         // cache miss, first need to read in data from next level
-        nextLevel.read(address);
+        double res = nextLevel.read(address, indicator);
         // now need to find a place to put this line
 
         // first look for an unoccupied line
@@ -66,17 +86,28 @@ public class Cache implements Buffer {
         if(unoccupied != null) {
             unoccupied.tag = tag;
             unoccupied.valid = true;
-            return;
+            if (indicator == 0 || indicator == 1) {
+                this.accessEnergy += 500;
+            } else if (indicator == 2) {
+                this.accessEnergy += 10000;
+            }
+            return res;
         }
 
         // no unoccupied lines, evict a line from this set
         Block evictee = findEvictee(set);
-        signalEviction(evictee, index);
-        undirty(evictee, address);
+        signalEviction(evictee, index, indicator);
+        undirty(evictee, address, indicator);
         evictee.tag = tag;
+        if (indicator == 0 || indicator == 1) {
+            this.accessEnergy += 5000;
+        } else if (indicator == 2) {
+            this.accessEnergy += 10000;
+        }
+        return res;
     }
 
-    public void write(long address) {
+    public double write(long address, int indicator) {
         int index = parser.getIndex(address);
         Block[] set = data[index];
         int tag = parser.getTag(address);
@@ -84,11 +115,25 @@ public class Cache implements Buffer {
         if(hit != null) {
             hits++;
             hit.dirty = true;
-            return;
+            if (indicator == 1) {
+                this.accessEnergy += 500;
+            } else if (indicator == 2) {
+                this.accessEnergy += 10000;
+            }
+            if(indicator == 0 || indicator == 1) {
+                return 0.5;
+            }
+            return 5;  // L2 write
         }
         misses++;
+        if (indicator == 1) {
+            this.accessEnergy += 505;
+        } else if (indicator == 2) {
+            this.accessEnergy += 10640;
+        }
+
         // cache miss, read in missing line from next level
-        nextLevel.read(address);
+        nextLevel.read(address, indicator);
         // look for an unoccupied block in the set
         Block unoccupied = checkUnoccupied(set);
         if(unoccupied != null) {
@@ -97,16 +142,28 @@ public class Cache implements Buffer {
             unoccupied.valid = true;
             // write the value to the correct offset
             unoccupied.dirty = true;
-            return;
+            if (indicator == 1) {
+                this.accessEnergy += 500;
+            } else if (indicator == 2) {
+                this.accessEnergy += 10000;
+            }
+            return 5;  // all write misses are the same time
         }
 
         // no unoccupied blocks, must evict an occupied one
         Block evictee = findEvictee(set);
-        signalEviction(evictee, index);
-        undirty(evictee, address);
+        signalEviction(evictee, index, indicator);
+        undirty(evictee, address, indicator);
         evictee.tag = tag;
+        evict++;
+        if (indicator == 1) {
+            this.accessEnergy += 5000;
+        } else if (indicator == 2) {
+            this.accessEnergy += 10000;
+        }
         // write the retrieved line to the evicted one's spot
         evictee.dirty = true;
+        return 5;
     }
 
     public double hitRatio() {
@@ -125,22 +182,22 @@ public class Cache implements Buffer {
         return hits + misses;
     }
 
-    private void evict(long address) {
+    private void evict(long address, int indicator) {
         int index = parser.getIndex(address);
         int tag = parser.getTag(address);
         Block[] set = data[index];
         Block evictee = checkHit(set, tag);
         if(evictee != null) {
-            undirty(evictee, address);
+            undirty(evictee, address, indicator);
             evictee.tag = 0;
             evictee.valid = false;
         }
     }
 
-    private void signalEviction(Block evictee, int index) {
+    private void signalEviction(Block evictee, int index, int indicator) {
         if(prevLevel.size() > 0) {
             for(Cache c : prevLevel) {
-                c.evict(parser.reconstructAddress(evictee.tag, index));
+                c.evict(parser.reconstructAddress(evictee.tag, index), indicator);
             }
         }
     }
@@ -190,11 +247,21 @@ public class Cache implements Buffer {
         return set[i];
     }
 
-    private void undirty(Block b, long address) {
+    private void undirty(Block b, long address, int indicator) {
         if(b.dirty) {
             // need to write evictee the next level
-            nextLevel.write(address);
+            nextLevel.write(address, indicator);
             b.dirty = false;
+            dirtyEvict++;
+            if (indicator == 0 || indicator == 1) {
+                this.accessEnergy += 5;
+//                nextLevel.accessEnergy += 10000;
+                nextLevel.addAccessEnergy(10000);
+            } else if (indicator == 2) {
+                this.accessEnergy += 640;
+//                nextLevel.accessEnergy += 200000;
+                nextLevel.addAccessEnergy(200000);
+            }
         }
     }
 
